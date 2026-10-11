@@ -47,6 +47,7 @@ class GatewayRoutingIT {
     private static final Backend CORE = Backend.start("core");
     private static final Backend NOTIFICATIONS = Backend.start("notification-service");
     private static final Backend CATALOG = Backend.start("catalog-service");
+    private static final Backend IDENTITY = Backend.start("identity-service");
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -58,6 +59,7 @@ class GatewayRoutingIT {
         registry.add("CORE_SERVICE_URL", CORE::url);
         registry.add("NOTIFICATION_SERVICE_URL", NOTIFICATIONS::url);
         registry.add("CATALOG_SERVICE_URL", CATALOG::url);
+        registry.add("IDENTITY_SERVICE_URL", IDENTITY::url);
     }
 
     @AfterAll
@@ -65,6 +67,7 @@ class GatewayRoutingIT {
         CORE.server.stop(0);
         NOTIFICATIONS.server.stop(0);
         CATALOG.server.stop(0);
+        IDENTITY.server.stop(0);
     }
 
     @BeforeEach
@@ -72,6 +75,7 @@ class GatewayRoutingIT {
         CORE.lastHeaders.clear();
         NOTIFICATIONS.lastHeaders.clear();
         CATALOG.lastHeaders.clear();
+        IDENTITY.lastHeaders.clear();
     }
 
     @Test
@@ -112,6 +116,29 @@ class GatewayRoutingIT {
         HttpResponse<String> response = send(path, Map.of());
 
         assertEquals("catalog-service:" + path, response.body());
+    }
+
+    /** Вход, регистрация и администрирование пользователей — в сервис пользователей. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/me",
+            "/api/v1/admin/users",
+            "/api/v1/admin/users/7/roles/COURIER"
+    })
+    void shouldRouteIdentityPathsToIdentityService(String path) throws Exception {
+        HttpResponse<String> response = send(path, Map.of());
+
+        assertEquals("identity-service:" + path, response.body());
+    }
+
+    /** Журнал аудита заказов остался у монолита, хотя путь тоже начинается с /admin. */
+    @Test
+    void shouldKeepAuditOnCore() throws Exception {
+        HttpResponse<String> response = send("/api/v1/admin/audit", Map.of());
+
+        assertEquals("core:/api/v1/admin/audit", response.body());
     }
 
     /**
