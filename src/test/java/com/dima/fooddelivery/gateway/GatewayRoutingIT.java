@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Шлюз против настоящих HTTP-серверов, изображающих монолит, каталог и сервис уведомлений.
+ * Шлюз против настоящих HTTP-серверов, изображающих монолит и вынесенные сервисы.
  *
  * <p>Серверы — встроенный в JDK {@code HttpServer}, а не моки: проверяется то, что уходит
  * по сети, — путь, заголовки, — а мок проверил бы только вызовы внутри шлюза. Отдельная
@@ -44,10 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "management.server.port=0")
 class GatewayRoutingIT {
 
-    private static final Backend CORE = Backend.start("core");
+    private static final Backend INSIGHTS = Backend.start("insights-service");
     private static final Backend NOTIFICATIONS = Backend.start("notification-service");
     private static final Backend CATALOG = Backend.start("catalog-service");
     private static final Backend IDENTITY = Backend.start("identity-service");
+    private static final Backend ORDERS = Backend.start("order-service");
+    private static final Backend PAYMENTS = Backend.start("payment-service");
+    private static final Backend TRACKING = Backend.start("tracking-service");
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -56,26 +59,35 @@ class GatewayRoutingIT {
 
     @DynamicPropertySource
     static void backends(DynamicPropertyRegistry registry) {
-        registry.add("CORE_SERVICE_URL", CORE::url);
+        registry.add("INSIGHTS_SERVICE_URL", INSIGHTS::url);
         registry.add("NOTIFICATION_SERVICE_URL", NOTIFICATIONS::url);
         registry.add("CATALOG_SERVICE_URL", CATALOG::url);
         registry.add("IDENTITY_SERVICE_URL", IDENTITY::url);
+        registry.add("ORDER_SERVICE_URL", ORDERS::url);
+        registry.add("PAYMENT_SERVICE_URL", PAYMENTS::url);
+        registry.add("TRACKING_SERVICE_URL", TRACKING::url);
     }
 
     @AfterAll
     static void stopBackends() {
-        CORE.server.stop(0);
+        INSIGHTS.server.stop(0);
         NOTIFICATIONS.server.stop(0);
         CATALOG.server.stop(0);
         IDENTITY.server.stop(0);
+        ORDERS.server.stop(0);
+        PAYMENTS.server.stop(0);
+        TRACKING.server.stop(0);
     }
 
     @BeforeEach
     void resetBackends() {
-        CORE.lastHeaders.clear();
+        INSIGHTS.lastHeaders.clear();
         NOTIFICATIONS.lastHeaders.clear();
         CATALOG.lastHeaders.clear();
         IDENTITY.lastHeaders.clear();
+        ORDERS.lastHeaders.clear();
+        PAYMENTS.lastHeaders.clear();
+        TRACKING.lastHeaders.clear();
     }
 
     @Test
@@ -85,21 +97,97 @@ class GatewayRoutingIT {
         assertAll(
                 () -> assertEquals(200, response.statusCode()),
                 () -> assertEquals("notification-service:/api/v1/notifications/me", response.body()),
-                () -> assertTrue(CORE.lastHeaders.isEmpty(), "монолит не должен был получить запрос")
+                () -> assertTrue(INSIGHTS.lastHeaders.isEmpty(), "insights-service не должен был получить запрос")
         );
     }
 
-    /** Всё, что не вынесено, по-прежнему уходит в монолит — по тому же пути. */
+    /** Рекомендации клиенту — insights-service, по тому же пути, что был у монолита. */
     @Test
-    void shouldRouteEverythingElseToCore() throws Exception {
-        HttpResponse<String> response = send("/api/v1/customers/7/orders?size=5", Map.of());
+    void shouldRouteRecommendationsToInsights() throws Exception {
+        HttpResponse<String> response = send("/api/v1/customers/7/recommendations?limit=5", Map.of());
 
         assertAll(
                 () -> assertEquals(200, response.statusCode()),
-                () -> assertEquals("core:/api/v1/customers/7/orders?size=5", response.body()),
+                () -> assertEquals("insights-service:/api/v1/customers/7/recommendations?limit=5", response.body()),
                 () -> assertTrue(NOTIFICATIONS.lastHeaders.isEmpty()),
-                () -> assertTrue(CATALOG.lastHeaders.isEmpty())
+                () -> assertTrue(ORDERS.lastHeaders.isEmpty())
         );
+    }
+
+    /** Корзина, заказы и доставки — в сервисе заказов; пути прежние. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/customers/7/restaurants/5/cart",
+            "/api/v1/customers/7/restaurants/5/cart/items/3",
+            "/api/v1/customers/7/restaurants/5/orders",
+            "/api/v1/customers/7/orders?size=5",
+            "/api/v1/customers/7/orders/feed",
+            "/api/v1/customers/7/orders/9",
+            "/api/v1/customers/7/orders/9/events",
+            "/api/v1/restaurants/5/orders",
+            "/api/v1/restaurants/5/orders/feed",
+            "/api/v1/restaurants/5/orders/9/accept",
+            "/api/v1/restaurants/5/orders/9/deliveries",
+            "/api/v1/deliveries/available",
+            "/api/v1/couriers/4/deliveries",
+            "/api/v1/couriers/4/deliveries/2/pick-up"
+    })
+    void shouldRouteOrderPathsToOrderService(String path) throws Exception {
+        HttpResponse<String> response = send(path, Map.of());
+
+        assertEquals("order-service:" + path, response.body());
+    }
+
+    /**
+     * Один путь — два владельца. Платежи читает payment-service, а запуск оплаты — это шаг
+     * саги, и он принадлежит сервису заказов. Различает их только метод.
+     */
+    @Test
+    void shouldSplitPaymentsByMethod() throws Exception {
+        String path = "/api/v1/customers/7/orders/9/payments";
+
+        HttpResponse<String> read = send(path, Map.of());
+        HttpResponse<String> pay = httpClient.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + gatewayPort + path))
+                        .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                        .header("Content-Type", "application/json")
+                        .build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+        HttpResponse<String> history = send("/api/v1/customers/7/payments", Map.of());
+
+        assertAll(
+                () -> assertEquals("payment-service:" + path, read.body()),
+                () -> assertEquals("order-service:" + path, pay.body()),
+                () -> assertEquals("payment-service:/api/v1/customers/7/payments", history.body())
+        );
+    }
+
+    /**
+     * Трек лежит под заказами и доставками, но принадлежит сервису трека. Маршрут сервиса
+     * заказов /customers/{id}/orders/** забрал бы его, ошибись порядок.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/customers/7/orders/9/track",
+            "/api/v1/couriers/4/deliveries/2/track",
+            "/api/v1/couriers/4/deliveries/2/positions"
+    })
+    void shouldRouteTrackPathsToTrackingService(String path) throws Exception {
+        HttpResponse<String> response = send(path, Map.of());
+
+        assertEquals("tracking-service:" + path, response.body());
+    }
+
+    /** Отзыв о заказе — insights-service, хотя путь тоже под заказом. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/customers/7/orders/9/review"
+    })
+    void shouldKeepOrderScopedMonolithPathsOnCore(String path) throws Exception {
+        HttpResponse<String> response = send(path, Map.of());
+
+        assertEquals("insights-service:" + path, response.body());
     }
 
     /** Рестораны, меню и поиск ушли в каталог; клиент об этом не знает — пути прежние. */
@@ -133,25 +221,12 @@ class GatewayRoutingIT {
         assertEquals("identity-service:" + path, response.body());
     }
 
-    /** Журнал аудита заказов остался у монолита, хотя путь тоже начинается с /admin. */
-    @Test
-    void shouldKeepAuditOnCore() throws Exception {
-        HttpResponse<String> response = send("/api/v1/admin/audit", Map.of());
-
-        assertEquals("core:/api/v1/admin/audit", response.body());
-    }
-
     /**
-     * Под {@code /restaurants/{id}} живут и чужие для каталога данные: заказы ресторана,
-     * отзывы, аналитика. Они обязаны остаться у монолита, хотя путь начинается с ресторана.
-     * Ошибись здесь порядок маршрутов — и владелец ресторана перестал бы видеть свои заказы.
+     * Под {@code /restaurants/{id}} живут и чужие для каталога данные: отзывы и аналитика.
+     * Они принадлежат insights-service, хотя путь начинается с ресторана.
      */
     @ParameterizedTest
     @ValueSource(strings = {
-            "/api/v1/restaurants/5/orders",
-            "/api/v1/restaurants/5/orders/feed",
-            "/api/v1/restaurants/5/orders/9/accept",
-            "/api/v1/restaurants/5/orders/9/deliveries",
             "/api/v1/restaurants/5/reviews",
             "/api/v1/restaurants/5/reviews/summary",
             "/api/v1/restaurants/5/analytics/sales"
@@ -159,7 +234,30 @@ class GatewayRoutingIT {
     void shouldKeepRestaurantScopedMonolithPathsOnCore(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());
 
-        assertEquals("core:" + path, response.body());
+        assertEquals("insights-service:" + path, response.body());
+    }
+
+    /**
+     * GraphQL, песочница и прочие пути insights-service. Журнал аудита переехал сюда из
+     * сервиса заказов: теперь он сводный, со всех сервисов.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/graphql",
+            "/graphiql",
+            "/api/v1/menu-items/100/ordered-together",
+            "/api/v1/admin/analytics/sales",
+            "/api/v1/admin/audit?service=order-service&resourceType=ORDER&resourceId=9",
+            "/api/v1/admin/recommendations/rebuild"
+    })
+    void shouldRouteInsightsPaths(String path) throws Exception {
+        assertEquals("insights-service:" + path, send(path, Map.of()).body());
+    }
+
+    /** Монолита больше нет, а с ним и маршрута «всё остальное»: незнакомый путь — 404. */
+    @Test
+    void shouldAnswerNotFoundForUnknownPath() throws Exception {
+        assertEquals(404, send("/api/v1/no-such-thing", Map.of()).statusCode());
     }
 
     @Test
@@ -172,7 +270,7 @@ class GatewayRoutingIT {
         assertAll(
                 () -> assertNotNull(returned, "клиент обязан получить метку"),
                 () -> assertEquals(1, returnedAll.size(), "метка не должна дублироваться в ответе"),
-                () -> assertEquals(returned, CORE.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER),
+                () -> assertEquals(returned, INSIGHTS.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER),
                         "сервис обязан получить ту же метку, что вернулась клиенту")
         );
     }
@@ -185,7 +283,7 @@ class GatewayRoutingIT {
     void shouldSanitizeCorrelationIdSuppliedByClient() throws Exception {
         send("/api/v1/ping", Map.of(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER, "abc-123 <script>"));
 
-        assertEquals("abc-123script", CORE.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER));
+        assertEquals("abc-123script", INSIGHTS.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER));
     }
 
     /** Если эта проверка упадёт, клиент сможет назваться чужим пользователем перед сервисами. */
