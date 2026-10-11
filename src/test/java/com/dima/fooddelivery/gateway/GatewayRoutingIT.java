@@ -114,7 +114,7 @@ class GatewayRoutingIT {
         );
     }
 
-    /** Корзина, заказы, доставки и аудит заказов — в сервисе заказов; пути прежние. */
+    /** Корзина, заказы и доставки — в сервисе заказов; пути прежние. */
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/v1/customers/7/restaurants/5/cart",
@@ -130,9 +130,7 @@ class GatewayRoutingIT {
             "/api/v1/restaurants/5/orders/9/deliveries",
             "/api/v1/deliveries/available",
             "/api/v1/couriers/4/deliveries",
-            "/api/v1/couriers/4/deliveries/2/pick-up",
-            "/api/v1/admin/audit",
-            "/api/v1/admin/audit/resources/ORDER/9"
+            "/api/v1/couriers/4/deliveries/2/pick-up"
     })
     void shouldRouteOrderPathsToOrderService(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());
@@ -239,13 +237,17 @@ class GatewayRoutingIT {
         assertEquals("insights-service:" + path, response.body());
     }
 
-    /** GraphQL, песочница и прочие пути insights-service. */
+    /**
+     * GraphQL, песочница и прочие пути insights-service. Журнал аудита переехал сюда из
+     * сервиса заказов: теперь он сводный, со всех сервисов.
+     */
     @ParameterizedTest
     @ValueSource(strings = {
             "/graphql",
             "/graphiql",
             "/api/v1/menu-items/100/ordered-together",
             "/api/v1/admin/analytics/sales",
+            "/api/v1/admin/audit?service=order-service&resourceType=ORDER&resourceId=9",
             "/api/v1/admin/recommendations/rebuild"
     })
     void shouldRouteInsightsPaths(String path) throws Exception {

@@ -72,13 +72,13 @@ spring:
               predicates:
                 - Path=/api/v1/restaurants/*/reviews,/api/v1/restaurants/*/reviews/**,/api/v1/restaurants/*/analytics/**
 
-            # Корзина, заказы клиента и ресторана, доставки, запуск оплаты и журнал аудита заказов.
+            # Корзина, заказы клиента и ресторана, доставки и запуск оплаты.
             # Заказы ресторана живут под /restaurants/{id}, поэтому маршрут стоит раньше каталога.
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8086}
               order: 3
               predicates:
-                - Path=/api/v1/customers/*/restaurants/*/cart,/api/v1/customers/*/restaurants/*/cart/**,/api/v1/customers/*/restaurants/*/orders,/api/v1/customers/*/orders,/api/v1/customers/*/orders/**,/api/v1/restaurants/*/orders,/api/v1/restaurants/*/orders/**,/api/v1/deliveries/**,/api/v1/couriers/*/deliveries,/api/v1/couriers/*/deliveries/**,/api/v1/admin/audit,/api/v1/admin/audit/**
+                - Path=/api/v1/customers/*/restaurants/*/cart,/api/v1/customers/*/restaurants/*/cart/**,/api/v1/customers/*/restaurants/*/orders,/api/v1/customers/*/orders,/api/v1/customers/*/orders/**,/api/v1/restaurants/*/orders,/api/v1/restaurants/*/orders/**,/api/v1/deliveries/**,/api/v1/couriers/*/deliveries,/api/v1/couriers/*/deliveries/**
 
             # Каталог: рестораны, меню, поиск и его администрирование.
             - id: catalog-service
@@ -88,13 +88,13 @@ spring:
                 - Path=/api/v1/restaurants,/api/v1/restaurants/**,/api/v1/search,/api/v1/admin/search/**
 
             # insights-service: GraphQL, песочница к нему, рекомендации по блюду, аналитика
-            # платформы, администрирование графа. Swagger UI шлюз тоже ведёт сюда, как раньше
+            # платформы, сводный журнал аудита всех сервисов, администрирование графа. Swagger UI шлюз тоже ведёт сюда, как раньше
             # вёл в монолит, — у остальных сервисов он на их собственных портах.
             - id: insights-service
               uri: ${INSIGHTS_SERVICE_URL:http://localhost:8082}
               order: 5
               predicates:
-                - Path=/graphql,/graphql/**,/graphiql,/graphiql/**,/api/v1/menu-items/**,/api/v1/admin/analytics/**,/api/v1/admin/recommendations/**,/api/v1/ping,/v3/api-docs/**,/swagger-ui/**,/swagger-ui.html
+                - Path=/graphql,/graphql/**,/graphiql,/graphiql/**,/api/v1/menu-items/**,/api/v1/admin/analytics/**,/api/v1/admin/audit,/api/v1/admin/audit/**,/api/v1/admin/recommendations/**,/api/v1/ping,/v3/api-docs/**,/swagger-ui/**,/swagger-ui.html
 
           default-filters:
             # Пользователя определяет подписанный токен, и только он. Заголовок с тем же
