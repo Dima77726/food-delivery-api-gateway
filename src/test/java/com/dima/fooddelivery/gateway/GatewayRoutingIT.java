@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "management.server.port=0")
 class GatewayRoutingIT {
 
-    private static final Backend CORE = Backend.start("core");
+    private static final Backend INSIGHTS = Backend.start("insights-service");
     private static final Backend NOTIFICATIONS = Backend.start("notification-service");
     private static final Backend CATALOG = Backend.start("catalog-service");
     private static final Backend IDENTITY = Backend.start("identity-service");
@@ -59,7 +59,7 @@ class GatewayRoutingIT {
 
     @DynamicPropertySource
     static void backends(DynamicPropertyRegistry registry) {
-        registry.add("CORE_SERVICE_URL", CORE::url);
+        registry.add("INSIGHTS_SERVICE_URL", INSIGHTS::url);
         registry.add("NOTIFICATION_SERVICE_URL", NOTIFICATIONS::url);
         registry.add("CATALOG_SERVICE_URL", CATALOG::url);
         registry.add("IDENTITY_SERVICE_URL", IDENTITY::url);
@@ -70,7 +70,7 @@ class GatewayRoutingIT {
 
     @AfterAll
     static void stopBackends() {
-        CORE.server.stop(0);
+        INSIGHTS.server.stop(0);
         NOTIFICATIONS.server.stop(0);
         CATALOG.server.stop(0);
         IDENTITY.server.stop(0);
@@ -81,7 +81,7 @@ class GatewayRoutingIT {
 
     @BeforeEach
     void resetBackends() {
-        CORE.lastHeaders.clear();
+        INSIGHTS.lastHeaders.clear();
         NOTIFICATIONS.lastHeaders.clear();
         CATALOG.lastHeaders.clear();
         IDENTITY.lastHeaders.clear();
@@ -97,18 +97,18 @@ class GatewayRoutingIT {
         assertAll(
                 () -> assertEquals(200, response.statusCode()),
                 () -> assertEquals("notification-service:/api/v1/notifications/me", response.body()),
-                () -> assertTrue(CORE.lastHeaders.isEmpty(), "монолит не должен был получить запрос")
+                () -> assertTrue(INSIGHTS.lastHeaders.isEmpty(), "insights-service не должен был получить запрос")
         );
     }
 
-    /** Всё, что не вынесено, по-прежнему уходит в монолит — по тому же пути. */
+    /** Рекомендации клиенту — insights-service, по тому же пути, что был у монолита. */
     @Test
-    void shouldRouteEverythingElseToCore() throws Exception {
+    void shouldRouteRecommendationsToInsights() throws Exception {
         HttpResponse<String> response = send("/api/v1/customers/7/recommendations?limit=5", Map.of());
 
         assertAll(
                 () -> assertEquals(200, response.statusCode()),
-                () -> assertEquals("core:/api/v1/customers/7/recommendations?limit=5", response.body()),
+                () -> assertEquals("insights-service:/api/v1/customers/7/recommendations?limit=5", response.body()),
                 () -> assertTrue(NOTIFICATIONS.lastHeaders.isEmpty()),
                 () -> assertTrue(ORDERS.lastHeaders.isEmpty())
         );
@@ -181,7 +181,7 @@ class GatewayRoutingIT {
         assertEquals("tracking-service:" + path, response.body());
     }
 
-    /** Отзыв о заказе остался у монолита, хотя путь тоже под заказом. */
+    /** Отзыв о заказе — insights-service, хотя путь тоже под заказом. */
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/v1/customers/7/orders/9/review"
@@ -189,7 +189,7 @@ class GatewayRoutingIT {
     void shouldKeepOrderScopedMonolithPathsOnCore(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());
 
-        assertEquals("core:" + path, response.body());
+        assertEquals("insights-service:" + path, response.body());
     }
 
     /** Рестораны, меню и поиск ушли в каталог; клиент об этом не знает — пути прежние. */
@@ -225,7 +225,7 @@ class GatewayRoutingIT {
 
     /**
      * Под {@code /restaurants/{id}} живут и чужие для каталога данные: отзывы и аналитика.
-     * Они обязаны остаться у монолита, хотя путь начинается с ресторана.
+     * Они принадлежат insights-service, хотя путь начинается с ресторана.
      */
     @ParameterizedTest
     @ValueSource(strings = {
@@ -236,7 +236,26 @@ class GatewayRoutingIT {
     void shouldKeepRestaurantScopedMonolithPathsOnCore(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());
 
-        assertEquals("core:" + path, response.body());
+        assertEquals("insights-service:" + path, response.body());
+    }
+
+    /** GraphQL, песочница и прочие пути insights-service. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/graphql",
+            "/graphiql",
+            "/api/v1/menu-items/100/ordered-together",
+            "/api/v1/admin/analytics/sales",
+            "/api/v1/admin/recommendations/rebuild"
+    })
+    void shouldRouteInsightsPaths(String path) throws Exception {
+        assertEquals("insights-service:" + path, send(path, Map.of()).body());
+    }
+
+    /** Монолита больше нет, а с ним и маршрута «всё остальное»: незнакомый путь — 404. */
+    @Test
+    void shouldAnswerNotFoundForUnknownPath() throws Exception {
+        assertEquals(404, send("/api/v1/no-such-thing", Map.of()).statusCode());
     }
 
     @Test
@@ -249,7 +268,7 @@ class GatewayRoutingIT {
         assertAll(
                 () -> assertNotNull(returned, "клиент обязан получить метку"),
                 () -> assertEquals(1, returnedAll.size(), "метка не должна дублироваться в ответе"),
-                () -> assertEquals(returned, CORE.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER),
+                () -> assertEquals(returned, INSIGHTS.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER),
                         "сервис обязан получить ту же метку, что вернулась клиенту")
         );
     }
@@ -262,7 +281,7 @@ class GatewayRoutingIT {
     void shouldSanitizeCorrelationIdSuppliedByClient() throws Exception {
         send("/api/v1/ping", Map.of(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER, "abc-123 <script>"));
 
-        assertEquals("abc-123script", CORE.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER));
+        assertEquals("abc-123script", INSIGHTS.header(CorrelationIdGlobalFilter.CORRELATION_ID_HEADER));
     }
 
     /** Если эта проверка упадёт, клиент сможет назваться чужим пользователем перед сервисами. */

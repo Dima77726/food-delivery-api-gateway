@@ -33,7 +33,7 @@ class UnavailableServiceIT {
     static void deadBackends(DynamicPropertyRegistry registry) {
         String dead = "http://localhost:" + closedPort();
 
-        registry.add("CORE_SERVICE_URL", () -> dead);
+        registry.add("INSIGHTS_SERVICE_URL", () -> dead);
         registry.add("CATALOG_SERVICE_URL", () -> dead);
         registry.add("IDENTITY_SERVICE_URL", () -> dead);
         registry.add("NOTIFICATION_SERVICE_URL", () -> dead);
