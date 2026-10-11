@@ -1,0 +1,69 @@
+spring:
+  application:
+    name: api-gateway
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # Маршруты читаются сверху вниз, побеждает первый подходящий. Поэтому вынесенные
+          # сервисы идут раньше монолита: его маршрут /api/** перехватил бы всё.
+          #
+          # Вынос следующего модуля из монолита — это новая строка здесь. Клиент при этом
+          # не меняет ни одного URL: ради этого шлюз и нужен.
+          routes:
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/notifications/**
+
+            # Монолит: всё, что ещё не вынесено. Swagger UI тоже его — спецификация API
+            # пока описывает монолит целиком.
+            - id: core
+              uri: ${CORE_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/**,/v3/api-docs/**,/swagger-ui/**,/swagger-ui.html
+
+          default-filters:
+            # Пользователя определяет подписанный токен, и только он. Заголовок с тем же
+            # смыслом, пришедший снаружи, срезается ещё на входе: стоит одному сервису когда-
+            # нибудь начать ему доверять, и любой клиент назовётся кем угодно. Сервисы
+            # заголовку и так не верят — это вторая линия, а не единственная.
+            - RemoveRequestHeader=X-User-Id
+
+          httpclient:
+            # Таймауты обязательны. По умолчанию их нет: зависший сервис держал бы
+            # соединение шлюза бесконечно, а с ним и клиента. Лучше быстро отдать 504.
+            connect-timeout: 2000
+            response-timeout: 15s
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9080}
+  endpoints:
+    web:
+      exposure:
+        # gateway — список маршрутов: удобно проверить, куда на самом деле уходит запрос.
+        # Только на служебном порту, наружу он не публикуется.
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    gateway:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+logging:
+  level:
+    root: INFO
+    com.dima.fooddelivery: DEBUG
