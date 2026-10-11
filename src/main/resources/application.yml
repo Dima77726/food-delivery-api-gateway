@@ -29,20 +29,46 @@ spring:
               predicates:
                 - Path=/api/v1/auth/**,/api/v1/admin/users,/api/v1/admin/users/**
 
-            # Пути под /restaurants/{id}, которые остались у монолита: заказы ресторана,
-            # отзывы и аналитика. Рестораном их делает только префикс пути, а данные — заказы,
-            # отзывы, продажи — принадлежат монолиту. Маршрут стоит раньше каталожного
-            # /api/v1/restaurants/**, иначе тот забрал бы и их.
+            # Платежи читает payment-service — только GET. Запуск оплаты (POST на тот же адрес)
+            # принадлежит сервису заказов: он ведёт сагу, а сюда она приходит командой через
+            # Kafka. Один путь, два владельца — различает их метод запроса.
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8087}
+              order: 1
+              predicates:
+                - Path=/api/v1/customers/*/payments,/api/v1/customers/*/orders/*/payments
+                - Method=GET
+
+            # Пути под заказами и доставками, которые остались у монолита: трек курьера, отзыв
+            # о заказе, рекомендации. Стоят раньше сервиса заказов — его маршрут
+            # /api/v1/customers/*/orders/** забрал бы и их.
+            - id: core-order-scoped
+              uri: ${CORE_SERVICE_URL:http://localhost:8082}
+              order: 2
+              predicates:
+                - Path=/api/v1/customers/*/orders/*/track,/api/v1/customers/*/orders/*/review,/api/v1/customers/*/recommendations,/api/v1/couriers/*/deliveries/*/track,/api/v1/couriers/*/deliveries/*/positions
+
+            # Пути под /restaurants/{id}, которые остались у монолита: отзывы и аналитика.
+            # Рестораном их делает только префикс пути, а данные принадлежат монолиту.
+            # Маршрут стоит раньше каталожного /api/v1/restaurants/**, иначе тот забрал бы и их.
             - id: core-restaurant-scoped
               uri: ${CORE_SERVICE_URL:http://localhost:8082}
               order: 2
               predicates:
-                - Path=/api/v1/restaurants/*/orders/**,/api/v1/restaurants/*/reviews,/api/v1/restaurants/*/reviews/**,/api/v1/restaurants/*/analytics/**
+                - Path=/api/v1/restaurants/*/reviews,/api/v1/restaurants/*/reviews/**,/api/v1/restaurants/*/analytics/**
+
+            # Корзина, заказы клиента и ресторана, доставки, запуск оплаты и журнал аудита заказов.
+            # Заказы ресторана живут под /restaurants/{id}, поэтому маршрут стоит раньше каталога.
+            - id: order-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:8086}
+              order: 3
+              predicates:
+                - Path=/api/v1/customers/*/restaurants/*/cart,/api/v1/customers/*/restaurants/*/cart/**,/api/v1/customers/*/restaurants/*/orders,/api/v1/customers/*/orders,/api/v1/customers/*/orders/**,/api/v1/restaurants/*/orders,/api/v1/restaurants/*/orders/**,/api/v1/deliveries/**,/api/v1/couriers/*/deliveries,/api/v1/couriers/*/deliveries/**,/api/v1/admin/audit,/api/v1/admin/audit/**
 
             # Каталог: рестораны, меню, поиск и его администрирование.
             - id: catalog-service
               uri: ${CATALOG_SERVICE_URL:http://localhost:8084}
-              order: 3
+              order: 4
               predicates:
                 - Path=/api/v1/restaurants,/api/v1/restaurants/**,/api/v1/search,/api/v1/admin/search/**
 
