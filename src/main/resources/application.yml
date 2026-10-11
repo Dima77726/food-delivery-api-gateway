@@ -39,14 +39,28 @@ spring:
                 - Path=/api/v1/customers/*/payments,/api/v1/customers/*/orders/*/payments
                 - Method=GET
 
-            # Пути под заказами и доставками, которые остались у монолита: трек курьера, отзыв
-            # о заказе, рекомендации. Стоят раньше сервиса заказов — его маршрут
-            # /api/v1/customers/*/orders/** забрал бы и их.
+            # Трек курьера: точки и маршрут по REST. Пути лежат под заказами и доставками,
+            # поэтому маршрут стоит раньше сервиса заказов — его /orders/** забрал бы и их.
+            - id: tracking-service
+              uri: ${TRACKING_SERVICE_URL:http://localhost:8088}
+              order: 2
+              predicates:
+                - Path=/api/v1/customers/*/orders/*/track,/api/v1/couriers/*/deliveries/*/track,/api/v1/couriers/*/deliveries/*/positions
+
+            # Живой трек: WebSocket. Схема ws:// в адресе включает в шлюзе проксирование
+            # WebSocket — рукопожатие и дальше кадры в обе стороны, пока соединение открыто.
+            - id: tracking-live
+              uri: ${TRACKING_WS_URL:ws://localhost:8088}
+              order: 2
+              predicates:
+                - Path=/ws/tracking,/ws/tracking/**
+
+            # Пути под заказами, которые остались у монолита: отзыв о заказе и рекомендации.
             - id: core-order-scoped
               uri: ${CORE_SERVICE_URL:http://localhost:8082}
               order: 2
               predicates:
-                - Path=/api/v1/customers/*/orders/*/track,/api/v1/customers/*/orders/*/review,/api/v1/customers/*/recommendations,/api/v1/couriers/*/deliveries/*/track,/api/v1/couriers/*/deliveries/*/positions
+                - Path=/api/v1/customers/*/orders/*/review,/api/v1/customers/*/recommendations
 
             # Пути под /restaurants/{id}, которые остались у монолита: отзывы и аналитика.
             # Рестораном их делает только префикс пути, а данные принадлежат монолиту.

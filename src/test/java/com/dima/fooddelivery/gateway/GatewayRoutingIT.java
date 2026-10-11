@@ -50,6 +50,7 @@ class GatewayRoutingIT {
     private static final Backend IDENTITY = Backend.start("identity-service");
     private static final Backend ORDERS = Backend.start("order-service");
     private static final Backend PAYMENTS = Backend.start("payment-service");
+    private static final Backend TRACKING = Backend.start("tracking-service");
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -64,6 +65,7 @@ class GatewayRoutingIT {
         registry.add("IDENTITY_SERVICE_URL", IDENTITY::url);
         registry.add("ORDER_SERVICE_URL", ORDERS::url);
         registry.add("PAYMENT_SERVICE_URL", PAYMENTS::url);
+        registry.add("TRACKING_SERVICE_URL", TRACKING::url);
     }
 
     @AfterAll
@@ -74,6 +76,7 @@ class GatewayRoutingIT {
         IDENTITY.server.stop(0);
         ORDERS.server.stop(0);
         PAYMENTS.server.stop(0);
+        TRACKING.server.stop(0);
     }
 
     @BeforeEach
@@ -84,6 +87,7 @@ class GatewayRoutingIT {
         IDENTITY.lastHeaders.clear();
         ORDERS.lastHeaders.clear();
         PAYMENTS.lastHeaders.clear();
+        TRACKING.lastHeaders.clear();
     }
 
     @Test
@@ -162,15 +166,25 @@ class GatewayRoutingIT {
     }
 
     /**
-     * Под заказами и доставками живут и данные монолита: трек курьера, отзыв, рекомендации.
-     * Маршрут сервиса заказов /customers/{id}/orders/** забрал бы их, ошибись порядок.
+     * Трек лежит под заказами и доставками, но принадлежит сервису трека. Маршрут сервиса
+     * заказов /customers/{id}/orders/** забрал бы его, ошибись порядок.
      */
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/v1/customers/7/orders/9/track",
-            "/api/v1/customers/7/orders/9/review",
             "/api/v1/couriers/4/deliveries/2/track",
             "/api/v1/couriers/4/deliveries/2/positions"
+    })
+    void shouldRouteTrackPathsToTrackingService(String path) throws Exception {
+        HttpResponse<String> response = send(path, Map.of());
+
+        assertEquals("tracking-service:" + path, response.body());
+    }
+
+    /** Отзыв о заказе остался у монолита, хотя путь тоже под заказом. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/customers/7/orders/9/review"
     })
     void shouldKeepOrderScopedMonolithPathsOnCore(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());

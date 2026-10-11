@@ -39,6 +39,7 @@ class UnavailableServiceIT {
         registry.add("NOTIFICATION_SERVICE_URL", () -> dead);
         registry.add("ORDER_SERVICE_URL", () -> dead);
         registry.add("PAYMENT_SERVICE_URL", () -> dead);
+        registry.add("TRACKING_SERVICE_URL", () -> dead);
     }
 
     @Test
