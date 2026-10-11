@@ -9,21 +9,40 @@ spring:
     gateway:
       server:
         webflux:
-          # Маршруты читаются сверху вниз, побеждает первый подходящий. Поэтому вынесенные
-          # сервисы идут раньше монолита: его маршрут /api/** перехватил бы всё.
+          # Побеждает первый подходящий маршрут в порядке order. Поэтому вынесенные сервисы
+          # идут раньше монолита: его маршрут /api/** перехватил бы всё. Порядок задан явно,
+          # а не положением в списке — так он не зависит от того, как список собран.
           #
           # Вынос следующего модуля из монолита — это новая строка здесь. Клиент при этом
           # не меняет ни одного URL: ради этого шлюз и нужен.
           routes:
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
+              order: 1
               predicates:
                 - Path=/api/v1/notifications/**
 
-            # Монолит: всё, что ещё не вынесено. Swagger UI тоже его — спецификация API
-            # пока описывает монолит целиком.
+            # Пути под /restaurants/{id}, которые остались у монолита: заказы ресторана,
+            # отзывы и аналитика. Рестораном их делает только префикс пути, а данные — заказы,
+            # отзывы, продажи — принадлежат монолиту. Маршрут стоит раньше каталожного
+            # /api/v1/restaurants/**, иначе тот забрал бы и их.
+            - id: core-restaurant-scoped
+              uri: ${CORE_SERVICE_URL:http://localhost:8082}
+              order: 2
+              predicates:
+                - Path=/api/v1/restaurants/*/orders/**,/api/v1/restaurants/*/reviews,/api/v1/restaurants/*/reviews/**,/api/v1/restaurants/*/analytics/**
+
+            # Каталог: рестораны, меню, поиск и его администрирование.
+            - id: catalog-service
+              uri: ${CATALOG_SERVICE_URL:http://localhost:8084}
+              order: 3
+              predicates:
+                - Path=/api/v1/restaurants,/api/v1/restaurants/**,/api/v1/search,/api/v1/admin/search/**
+
+            # Монолит: всё, что ещё не вынесено. Swagger UI тоже его.
             - id: core
               uri: ${CORE_SERVICE_URL:http://localhost:8082}
+              order: 100
               predicates:
                 - Path=/api/**,/v3/api-docs/**,/swagger-ui/**,/swagger-ui.html
 
