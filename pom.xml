@@ -53,6 +53,16 @@
             <artifactId>spring-boot-starter-micrometer-metrics</artifactId>
         </dependency>
 
+        <!--
+            Трассировка: Micrometer Tracing поверх OpenTelemetry, спаны уходят по OTLP в Tempo.
+            Стартер тянет ещё micrometer-registry-otlp — метрики по OTLP отключены в
+            application.yml, их по-прежнему снимает Prometheus.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-opentelemetry</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
