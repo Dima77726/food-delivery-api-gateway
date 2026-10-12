@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Сборка и тесты
+    runs-on: ubuntu-latest
+    # Testcontainers ждёт готовности контейнера; при зависшем Docker без лимита
+    # job висел бы до потолка в 6 часов.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # server-id github: setup-java пишет settings.xml с токеном для чтения контрактов
+      # из GitHub Packages.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Сборка и тесты
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./mvnw -B --no-transfer-progress verify
+
+      # Отчёты нужны именно когда упало: в логе видна строчка с ошибкой, а в отчёте — стектрейс
+      # и вывод конкретного теста.
+      - name: Отчёты о тестах
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          retention-days: 7
