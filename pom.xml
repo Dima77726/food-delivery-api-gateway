@@ -63,6 +63,15 @@
             <artifactId>spring-boot-starter-opentelemetry</artifactId>
         </dependency>
 
+        <!--
+            Redis для ограничения частоты запросов: счётчик клиента общий для всех экземпляров
+            шлюза. Реактивный клиент — шлюз на WebFlux, блокирующий в нём недопустим.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
@@ -71,6 +80,19 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Настоящий Redis для теста ограничителя частоты: счёт делает Lua-скрипт, его не подменить. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.redis</groupId>
+            <artifactId>testcontainers-redis</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

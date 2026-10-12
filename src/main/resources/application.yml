@@ -5,6 +5,13 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 20s
 
+  data:
+    redis:
+      # Только для ограничения частоты. Клиент соединение лениво, поэтому выключенный
+      # ограничитель Redis не трогает вовсе.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   reactor:
     # Контекст трассировки живёт в Reactor-контексте, а не в ThreadLocal: запрос в WebFlux
     # переходит между потоками, и без автоматического переноса спан шлюза терял бы родителя
@@ -115,7 +122,28 @@ spring:
             connect-timeout: 2000
             response-timeout: 15s
 
+app:
+  rate-limit:
+    # Выключено по умолчанию: шлюзу нужен живой Redis, а тесты и запуск из IDE его не поднимают.
+    # Docker Compose включает. Пороги — в токенах: ёмкость ведра (burst) и пополнение в секунду.
+    enabled: ${RATE_LIMIT_ENABLED:false}
+    general:
+      replenish-rate: ${RATE_LIMIT_RATE:50}
+      burst-capacity: ${RATE_LIMIT_BURST:100}
+      requested-tokens: 1
+    # Вход и регистрация: запрос стоит 4 токена при пополнении 1 в секунду и ёмкости 20 —
+    # пять попыток подряд, дальше одна примерно раз в четыре секунды.
+    auth:
+      replenish-rate: ${RATE_LIMIT_AUTH_RATE:1}
+      burst-capacity: ${RATE_LIMIT_AUTH_BURST:20}
+      requested-tokens: ${RATE_LIMIT_AUTH_COST:4}
+
 management:
+  health:
+    redis:
+      # Индикатор Redis — только при включённом ограничителе, иначе недоступный Redis
+      # (его нет в тестах и при запуске из IDE) уводил бы готовность шлюза в DOWN.
+      enabled: ${RATE_LIMIT_ENABLED:false}
   # Трассировка. Спаны собирает Micrometer Tracing поверх OpenTelemetry и отправляет по OTLP
   # в Tempo. Сквозной идентификатор trace живёт рядом с X-Correlation-Id, а не вместо него:
   # метка запроса — наша, она едет и через то, что трассировка не покрывает (outbox, очереди).
