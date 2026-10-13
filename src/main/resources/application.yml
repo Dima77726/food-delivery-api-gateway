@@ -100,6 +100,21 @@ spring:
               predicates:
                 - Path=/api/v1/restaurants,/api/v1/restaurants/**,/api/v1/search,/api/v1/admin/search/**
 
+            # Фото блюд. В меню они приходят адресом /media/<ключ>; шлюз отдаёт их из бакета MinIO.
+            # Только чтение: GET и HEAD. Запись и удаление в хранилище идут не через шлюз.
+            # Authorization и Cookie срезаются: MinIO принял бы токен за подпись S3 и ответил бы
+            # ошибкой там, где анонимное чтение разрешено. Имя бакета — menu-images (MEDIA_BUCKET).
+            - id: media-storage
+              uri: ${MEDIA_STORAGE_URL:http://localhost:9000}
+              order: 4
+              predicates:
+                - Path=/media/**
+                - Method=GET,HEAD
+              filters:
+                - RemoveRequestHeader=Authorization
+                - RemoveRequestHeader=Cookie
+                - RewritePath=/media/(?<key>.*),/menu-images/$\{key}
+
             # insights-service: GraphQL, песочница к нему, рекомендации по блюду, аналитика
             # платформы, сводный журнал аудита всех сервисов, администрирование графа. Swagger UI шлюз тоже ведёт сюда, как раньше
             # вёл в монолит, — у остальных сервисов он на их собственных портах.

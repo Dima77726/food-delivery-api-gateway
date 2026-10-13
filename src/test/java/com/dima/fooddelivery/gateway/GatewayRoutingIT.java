@@ -51,6 +51,7 @@ class GatewayRoutingIT {
     private static final Backend ORDERS = Backend.start("order-service");
     private static final Backend PAYMENTS = Backend.start("payment-service");
     private static final Backend TRACKING = Backend.start("tracking-service");
+    private static final Backend MEDIA = Backend.start("media-storage");
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -66,6 +67,7 @@ class GatewayRoutingIT {
         registry.add("ORDER_SERVICE_URL", ORDERS::url);
         registry.add("PAYMENT_SERVICE_URL", PAYMENTS::url);
         registry.add("TRACKING_SERVICE_URL", TRACKING::url);
+        registry.add("MEDIA_STORAGE_URL", MEDIA::url);
     }
 
     @AfterAll
@@ -77,6 +79,7 @@ class GatewayRoutingIT {
         ORDERS.server.stop(0);
         PAYMENTS.server.stop(0);
         TRACKING.server.stop(0);
+        MEDIA.server.stop(0);
     }
 
     @BeforeEach
@@ -88,6 +91,36 @@ class GatewayRoutingIT {
         ORDERS.lastHeaders.clear();
         PAYMENTS.lastHeaders.clear();
         TRACKING.lastHeaders.clear();
+        MEDIA.lastHeaders.clear();
+    }
+
+    /** Фото блюд отдаются из бакета: префикс /media заменяется именем бакета, учётные данные не пересылаются. */
+    @Test
+    void shouldServeMediaFromBucketWithoutForwardingCredentials() throws Exception {
+        HttpResponse<String> response = send("/media/menu-items/7/abc.png",
+                Map.of("Authorization", "Bearer secret-token", "Cookie", "session=1"));
+
+        assertAll(
+                () -> assertEquals(200, response.statusCode()),
+                () -> assertEquals("media-storage:/menu-images/menu-items/7/abc.png", response.body()),
+                () -> assertNull(MEDIA.header("Authorization"), "токен не должен уйти в хранилище"),
+                () -> assertNull(MEDIA.header("Cookie")),
+                () -> assertTrue(CATALOG.lastHeaders.isEmpty())
+        );
+    }
+
+    /** Через шлюз хранилище только читают: запись и удаление фото идут через каталог. */
+    @Test
+    void shouldNotAllowWritingToMediaThroughGateway() throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + gatewayPort + "/media/menu-items/7/abc.png"))
+                        .DELETE().build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertAll(
+                () -> assertEquals(404, response.statusCode()),
+                () -> assertTrue(MEDIA.lastHeaders.isEmpty(), "хранилище не должно было получить запрос")
+        );
     }
 
     @Test
