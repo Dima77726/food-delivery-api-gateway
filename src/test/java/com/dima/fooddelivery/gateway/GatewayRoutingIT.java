@@ -94,6 +94,19 @@ class GatewayRoutingIT {
         MEDIA.lastHeaders.clear();
     }
 
+    /** Открытые ключи доступны снаружи — через шлюз, и только на чтение. */
+    @Test
+    void shouldRouteJwksToIdentityServiceReadOnly() throws Exception {
+        assertEquals("identity-service:/.well-known/jwks.json", send("/.well-known/jwks.json", Map.of()).body());
+
+        HttpResponse<String> post = httpClient.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + gatewayPort + "/.well-known/jwks.json"))
+                        .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(404, post.statusCode());
+    }
+
     /** SOAP для касс: меню у каталога, заказы у сервиса заказов, WSDL и запросы идут одним путём. */
     @ParameterizedTest
     @ValueSource(strings = {"/ws/menu.wsdl", "/ws/menu"})
