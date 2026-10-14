@@ -94,6 +94,19 @@ class GatewayRoutingIT {
         MEDIA.lastHeaders.clear();
     }
 
+    /** SOAP для касс: меню у каталога, заказы у сервиса заказов, WSDL и запросы идут одним путём. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/ws/menu.wsdl", "/ws/menu"})
+    void shouldRoutePartnerMenuSoapToCatalog(String path) throws Exception {
+        assertEquals("catalog-service:" + path, send(path, Map.of()).body());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/ws/orders.wsdl", "/ws/orders"})
+    void shouldRoutePartnerOrdersSoapToOrderService(String path) throws Exception {
+        assertEquals("order-service:" + path, send(path, Map.of()).body());
+    }
+
     /** Фото блюд отдаются из бакета: префикс /media заменяется именем бакета, учётные данные не пересылаются. */
     @Test
     void shouldServeMediaFromBucketWithoutForwardingCredentials() throws Exception {
