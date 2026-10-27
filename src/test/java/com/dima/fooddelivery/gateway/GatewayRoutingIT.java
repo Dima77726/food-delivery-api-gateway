@@ -208,7 +208,10 @@ class GatewayRoutingIT {
             "/api/v1/restaurants/5/orders/9/deliveries",
             "/api/v1/deliveries/available",
             "/api/v1/couriers/4/deliveries",
-            "/api/v1/couriers/4/deliveries/2/pick-up"
+            "/api/v1/couriers/4/deliveries/2/pick-up",
+            "/api/v1/restaurants/5/settlements",
+            "/api/v1/restaurants/5/settlements.csv",
+            "/api/v1/admin/settlements/2026-10-26"
     })
     void shouldRouteOrderPathsToOrderService(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());

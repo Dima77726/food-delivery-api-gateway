@@ -148,13 +148,13 @@ spring:
               predicates:
                 - Path=/api/v1/restaurants/*/reviews,/api/v1/restaurants/*/reviews/**,/api/v1/restaurants/*/analytics/**
 
-            # Корзина, заказы клиента и ресторана, доставки и запуск оплаты.
+            # Корзина, заказы клиента и ресторана, доставки, запуск оплаты и расчёты с ресторанами (Spring Batch).
             # Заказы ресторана живут под /restaurants/{id}, поэтому маршрут стоит раньше каталога.
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8086}
               order: 3
               predicates:
-                - Path=/api/v1/customers/*/restaurants/*/cart,/api/v1/customers/*/restaurants/*/cart/**,/api/v1/customers/*/restaurants/*/orders,/api/v1/customers/*/orders,/api/v1/customers/*/orders/**,/api/v1/restaurants/*/orders,/api/v1/restaurants/*/orders/**,/api/v1/deliveries/**,/api/v1/couriers/*/deliveries,/api/v1/couriers/*/deliveries/**
+                - Path=/api/v1/customers/*/restaurants/*/cart,/api/v1/customers/*/restaurants/*/cart/**,/api/v1/customers/*/restaurants/*/orders,/api/v1/customers/*/orders,/api/v1/customers/*/orders/**,/api/v1/restaurants/*/orders,/api/v1/restaurants/*/orders/**,/api/v1/deliveries/**,/api/v1/couriers/*/deliveries,/api/v1/couriers/*/deliveries/**,/api/v1/restaurants/*/settlements,/api/v1/restaurants/*/settlements.csv,/api/v1/admin/settlements/**
 
             # Каталог: рестораны, меню, поиск и его администрирование.
             - id: catalog-service
