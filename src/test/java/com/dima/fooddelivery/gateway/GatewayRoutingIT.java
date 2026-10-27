@@ -149,6 +149,25 @@ class GatewayRoutingIT {
         );
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/restaurants/5/webhooks", "/api/v1/restaurants/5/webhooks/3/deliveries"})
+    void shouldRouteRestaurantWebhooksToNotificationService(String path) throws Exception {
+        assertEquals("notification-service:" + path, send(path, Map.of()).body());
+    }
+
+    /** Входящие вебхуки — только POST: GET на тот же адрес шлюз не ведёт никуда. */
+    @Test
+    void shouldRouteInboundWebhooksByProviderAndOnlyForPost() throws Exception {
+        assertEquals("payment-service:/api/v1/webhooks/stripe", post("/api/v1/webhooks/stripe").body());
+        assertEquals("notification-service:/api/v1/webhooks/telegram", post("/api/v1/webhooks/telegram").body());
+        assertEquals(404, send("/api/v1/webhooks/stripe", Map.of()).statusCode());
+    }
+
+    private HttpResponse<String> post(String path) throws Exception {
+        return httpClient.send(HttpRequest.newBuilder(URI.create("http://localhost:" + gatewayPort + path))
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     @Test
     void shouldRouteNotificationsToNotificationService() throws Exception {
         HttpResponse<String> response = send("/api/v1/notifications/me", Map.of());
