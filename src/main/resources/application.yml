@@ -52,6 +52,30 @@ spring:
               metadata:
                 response-timeout: -1
 
+            # Входящие вебхуки провайдеров. Токена у провайдера нет — подлинность проверяет сервис по подписи
+            # (Stripe-Signature) или секретному заголовку (Telegram); шлюз только ведёт и считает частоту.
+            - id: payment-stripe-webhook
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8087}
+              order: 1
+              predicates:
+                - Path=/api/v1/webhooks/stripe
+                - Method=POST
+
+            - id: notification-telegram-webhook
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
+              order: 1
+              predicates:
+                - Path=/api/v1/webhooks/telegram
+                - Method=POST
+
+            # Исходящие вебхуки ресторана (подписки и журнал доставок) живут в notification-service. Путь под
+            # рестораном, поэтому маршрут стоит раньше каталожного /api/v1/restaurants/**.
+            - id: notification-webhooks
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
+              order: 2
+              predicates:
+                - Path=/api/v1/restaurants/*/webhooks,/api/v1/restaurants/*/webhooks/**
+
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
               order: 1
