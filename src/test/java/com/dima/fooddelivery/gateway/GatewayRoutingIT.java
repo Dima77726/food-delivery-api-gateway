@@ -230,7 +230,8 @@ class GatewayRoutingIT {
     @ValueSource(strings = {
             "/api/v1/customers/7/orders/9/track",
             "/api/v1/couriers/4/deliveries/2/track",
-            "/api/v1/couriers/4/deliveries/2/positions"
+            "/api/v1/couriers/4/deliveries/2/positions",
+            "/api/v1/orders/9/chat/messages"
     })
     void shouldRouteTrackPathsToTrackingService(String path) throws Exception {
         HttpResponse<String> response = send(path, Map.of());
