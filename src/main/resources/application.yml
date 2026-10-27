@@ -30,6 +30,28 @@ spring:
           # остальное» не осталось — незнакомый путь шлюз сам отвечает 404. Переезд прошёл
           # так, что клиент не поменял ни одного URL: ради этого шлюз и нужен.
           routes:
+            # Живые обновления: потоки SSE и долгие запросы (long polling). Отдельные маршруты ради
+            # одного свойства — без общего таймаута ответа (response-timeout: -1). Общие 15 секунд
+            # оборвали бы поток SSE на пятнадцатой секунде, а долгий запрос — раньше его собственного
+            # таймаута. Зависший сервис здесь не страшен: поток живёт пульсом раз в 15 секунд, долгий
+            # запрос сервис сам завершает не позже 30 секунд, а connect-timeout остаётся общим.
+            # Порядок 0 — раньше широких маршрутов тех же сервисов, которые забрали бы эти пути.
+            - id: order-service-live
+              uri: ${ORDER_SERVICE_URL:http://localhost:8086}
+              order: 0
+              predicates:
+                - Path=/api/v1/customers/*/orders/*/stream,/api/v1/restaurants/*/orders/stream,/api/v1/deliveries/available/poll
+              metadata:
+                response-timeout: -1
+
+            - id: notification-service-live
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
+              order: 0
+              predicates:
+                - Path=/api/v1/notifications/me/poll
+              metadata:
+                response-timeout: -1
+
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
               order: 1
