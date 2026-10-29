@@ -45,6 +45,7 @@ class LiveRoutesIT {
         String url = "http://localhost:" + SLOW_BACKEND.getAddress().getPort();
         registry.add("ORDER_SERVICE_URL", () -> url);
         registry.add("NOTIFICATION_SERVICE_URL", () -> url);
+        registry.add("MESSENGER_SERVICE_URL", () -> url);
     }
 
     @AfterAll
@@ -57,7 +58,8 @@ class LiveRoutesIT {
             "/api/v1/customers/7/orders/9/stream",
             "/api/v1/restaurants/5/orders/stream",
             "/api/v1/deliveries/available/poll",
-            "/api/v1/notifications/me/poll"
+            "/api/v1/notifications/me/poll",
+            "/api/v1/messenger/attachments/0b6d2a58-6a0e-4f1f-9d5e-3f2a1c9b8e77"
     })
     void shouldWaitForSlowLiveResponse(String path) throws Exception {
         HttpResponse<String> response = get(path);
