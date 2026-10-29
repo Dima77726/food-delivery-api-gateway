@@ -132,6 +132,24 @@ spring:
               predicates:
                 - Path=/ws/tracking,/ws/tracking/**
 
+            # Мессенджер: всё под /api/v1/messenger — чаты, сообщения, вложения, звонки, сотрудники точек.
+            # Права проверяет сам сервис (токен и участие в чате на каждом действии); вложения отдаются
+            # потоком, поэтому без таймаута ответа: видео в 50 МБ на медленном канале идёт дольше обычного.
+            - id: messenger-service
+              uri: ${MESSENGER_SERVICE_URL:http://localhost:8089}
+              order: 2
+              predicates:
+                - Path=/api/v1/messenger,/api/v1/messenger/**
+              metadata:
+                response-timeout: -1
+
+            # Живые события мессенджера и сигнализация звонков — WebSocket, токен первым кадром.
+            - id: messenger-live
+              uri: ${MESSENGER_WS_URL:ws://localhost:8089}
+              order: 2
+              predicates:
+                - Path=/ws/messenger,/ws/messenger/**
+
             # Отзыв о заказе и рекомендации клиенту. Пути под заказом и клиентом, поэтому маршрут
             # стоит раньше сервиса заказов — его /customers/*/orders/** забрал бы и их.
             - id: insights-order-scoped
